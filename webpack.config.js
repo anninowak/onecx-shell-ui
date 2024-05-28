@@ -45,53 +45,50 @@ const webpackConfig = {
       '@ngx-translate/core': {
         singleton: true,
         requiredVersion: 'auto',
-        eager: true
+        eager: true,
       },
       '@onecx/accelerator': {
         requiredVersion: 'auto',
         includeSecondaries: true,
-        eager: true,
       },
       '@onecx/angular-accelerator': {
         requiredVersion: 'auto',
         includeSecondaries: true,
-        eager: true,
       },
       '@onecx/angular-integration-interface': {
         requiredVersion: 'auto',
         includeSecondaries: true,
-        eager: true,
       },
       '@onecx/angular-remote-components': {
         requiredVersion: 'auto',
         includeSecondaries: true,
-        eager: true,
       },
       '@onecx/integration-interface': {
         requiredVersion: 'auto',
         includeSecondaries: true,
-        eager: true,
       },
       '@onecx/keycloak-auth': {
         requiredVersion: 'auto',
         includeSecondaries: true,
-        eager: true,
       },
       '@onecx/portal-integration-angular': {
         requiredVersion: 'auto',
         includeSecondaries: true,
-        eager: true,
       },
       '@onecx/shell-core': {
         requiredVersion: 'auto',
         includeSecondaries: true,
-        eager: true,
       },
+      'primeng': {
+        requiredVersion: 'auto',
+        includeSecondaries: true,
+      }
     }),
 
     sharedMappings: ['@onecx/portal-integration-angular'],
   }),
 };
+
 const plugins = webpackConfig.plugins.filter(
   (plugin) => !(plugin instanceof ModifyEntryPlugin)
 );

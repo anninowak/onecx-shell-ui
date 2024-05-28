@@ -1,5 +1,5 @@
 {
-  "name": "shell",
+  "name": "onecx-shell-ui",
   "$schema": "node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "prefix": "ocx-shell",
@@ -21,12 +21,16 @@
         "tsConfig": "./tsconfig.app.json",
         "inlineStyleLanguage": "scss",
         "assets": [
-          "./src/favicon.ico",
           "./src/assets",
           {
             "glob": "**/*",
             "input": "./node_modules/@onecx/portal-integration-angular/assets/",
             "output": "/onecx-portal-lib/assets/"
+          },
+          {
+            "glob": "**/*",
+            "input": "./node_modules/@onecx/angular-accelerator/assets/",
+            "output": "/onecx-angular-accelerator/assets/"
           }
         ],
         "styles": [
@@ -71,24 +75,23 @@
       "executor": "@nx/angular:dev-server",
       "configurations": {
         "production": {
-          "buildTarget": "shell:build:production"
+          "buildTarget": "onecx-shell-ui:build:production"
         },
         "development": {
-          "buildTarget": "shell:build:development"
+          "buildTarget": "onecx-shell-ui:build:development"
         }
       },
       "defaultConfiguration": "development",
       "options": {
         "hmr": false,
         "port": 4300,
-        "publicHost": "http://localhost:4300",
         "proxyConfig": "proxy.conf.js"
       }
     },
     "extract-i18n": {
       "executor": "@angular-devkit/build-angular:extract-i18n",
       "options": {
-        "buildTarget": "shell:build",
+        "buildTarget": "onecx-shell-ui:build",
         "customWebpackConfig": "./webpack.config.js"
       }
     },

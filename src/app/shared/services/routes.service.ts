@@ -1,34 +1,39 @@
-import { Injectable } from '@angular/core';
-import { Route, Router } from '@angular/router';
-import { PathMatch, PermissionBffService } from '../generated';
-import { appRoutes } from 'src/app/app.routes';
 import {
   LoadRemoteModuleOptions,
   loadRemoteModule,
 } from '@angular-architects/module-federation';
+import { Location } from '@angular/common';
+import { Injectable } from '@angular/core';
+import { NavigationEnd, Route, Router } from '@angular/router';
 import {
   AppStateService,
   CONFIG_KEY,
   ConfigurationService,
   PortalMessageService,
-} from '@onecx/portal-integration-angular';
-import { Route as BffGeneratedRoute } from '../generated/model/route';
-import { ErrorPageComponent } from '../components/error-page.component';
-import { PermissionsCacheService } from '@onecx/shell-core';
-import { firstValueFrom, map } from 'rxjs';
+} from '@onecx/angular-integration-interface';
 import { PermissionsTopic } from '@onecx/integration-interface';
+import {
+  PermissionsCacheService,
+  ShowContentProvider,
+} from '@onecx/shell-core';
+import { BehaviorSubject, filter, firstValueFrom, map } from 'rxjs';
+import { appRoutes } from 'src/app/app.routes';
+import { ErrorPageComponent } from '../components/error-page.component';
 import { HomeComponent } from '../components/home/home.component';
-import { WebComponentRoute } from '../generated/model/webComponentRoute';
-import { Location } from '@angular/common';
+import { PathMatch, PermissionBffService } from '../generated';
+import { Route as BffGeneratedRoute } from '../generated/model/route';
 
 export const DEFAULT_CATCH_ALL_ROUTE: Route = {
   path: '**',
   component: ErrorPageComponent,
+  title: 'Error',
 };
 
 @Injectable({ providedIn: 'root' })
-export class RoutesService {
+export class RoutesService implements ShowContentProvider {
   private permissionsTopic$ = new PermissionsTopic();
+  private isFirstLoad = true;
+  showContent$ = new BehaviorSubject<boolean>(true);
 
   constructor(
     private router: Router,
@@ -37,17 +42,20 @@ export class RoutesService {
     private configurationService: ConfigurationService,
     private permissionsCacheService: PermissionsCacheService,
     private permissionsService: PermissionBffService
-  ) {}
+  ) {
+    router.events
+      .pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        map(() => true)
+      )
+      .subscribe(this.showContent$);
+  }
 
   async init(routes: BffGeneratedRoute[]): Promise<unknown> {
-    const workspaceBaseUrl =
-      this.appStateService.currentWorkspace$.getValue()?.baseUrl;
-    const generatedRoutes = routes.map((r) =>
-      this.convertToRoute(r, workspaceBaseUrl ?? '')
-    );
-    if (!this.containsRouteForWorkspace(routes)) {
-      console.log(`Adding fallback route for base url ${workspaceBaseUrl}`);
-      generatedRoutes.push(this.createFallbackRoute());
+    const generatedRoutes = routes.map((r) => this.convertToRoute(r));
+    if (!(await this.containsRouteForWorkspace(routes))) {
+      console.log(`Adding fallback route`);
+      generatedRoutes.push(await this.createFallbackRoute());
     }
     this.router.resetConfig([
       ...appRoutes,
@@ -58,61 +66,97 @@ export class RoutesService {
     ]);
     console.log(
       `🧭 Adding App routes: \n${routes
-        .map(
-          (lr) =>
-            `${lr.url} -> ${JSON.stringify(workspaceBaseUrl + lr.baseUrl)}`
-        )
+        .map((lr) => `${lr.url} -> ${JSON.stringify(lr.baseUrl)}`)
         .join('\t\n')}`
     );
     return Promise.resolve();
   }
 
-  private convertToRoute(
-    r: BffGeneratedRoute,
-    workspaceBaseUrl: string
-  ): Route {
-    const joinedBaseUrl = Location.joinWithSlash(workspaceBaseUrl, r.baseUrl);
+  private convertToRoute(r: BffGeneratedRoute): Route {
     return {
-      path: this.toRouteUrl(joinedBaseUrl),
+      path: this.toRouteUrl(r.baseUrl),
       data: {
         module: r.exposedModule,
         breadcrumb: r.productName,
       },
-      pathMatch:
-        r.pathMatch ?? (joinedBaseUrl.endsWith('$') ? 'full' : 'prefix'),
-      loadChildren: async () => await this.loadChildren(r, joinedBaseUrl),
-      canActivateChild: [() => this.updateAppState(r, joinedBaseUrl)],
+      pathMatch: r.pathMatch ?? (r.baseUrl.endsWith('$') ? 'full' : 'prefix'),
+      loadChildren: async () => await this.loadChildren(r, r.baseUrl),
+      canActivateChild: [() => this.updateAppEnvironment(r, r.baseUrl)],
+      title: r.displayName,
     };
   }
 
   private async loadChildren(r: BffGeneratedRoute, joinedBaseUrl: string) {
+    this.showContent$.next(false);
     await this.appStateService.globalLoading$.publish(true);
     console.log(`➡ Load remote module ${r.exposedModule}`);
     try {
       try {
-        await this.updateAppState(r, joinedBaseUrl);
+        await this.updateAppEnvironment(r, joinedBaseUrl);
         const m = await loadRemoteModule(this.toLoadRemoteEntryOptions(r));
         const exposedModule = r.exposedModule.startsWith('./')
           ? r.exposedModule.slice(2)
           : r.exposedModule;
-        console.log(`Load remote module ${exposedModule} finished`);
+        console.log(`Load remote module ${exposedModule} finished.`);
         return m[exposedModule];
       } catch (err) {
-        return this.onRemoteLoadError(err);
+        return await this.onRemoteLoadError(err);
       }
     } finally {
-      this.appStateService.globalLoading$.publish(false);
+      await this.appStateService.globalLoading$.publish(false);
     }
+  }
+
+  private async updateAppEnvironment(
+    r: BffGeneratedRoute,
+    joinedBaseUrl: string
+  ): Promise<boolean> {
+    this.updateAppStyles(r);
+    return this.updateAppState(r, joinedBaseUrl);
   }
 
   private async updateAppState(
     r: BffGeneratedRoute,
     joinedBaseUrl: string
   ): Promise<boolean> {
-    return Promise.all([
-      this.updateMfeInfo(r, joinedBaseUrl),
-      this.updatePermissions(r),
-    ]).then(() => true);
+    const currentGlobalLoading = await firstValueFrom(
+      this.appStateService.globalLoading$.asObservable()
+    );
+    const currentMfeInfo = !this.isFirstLoad
+      ? await firstValueFrom(this.appStateService.currentMfe$.asObservable())
+      : undefined;
+
+    if (this.isFirstLoad || currentMfeInfo?.remoteBaseUrl !== r.url) {
+      this.isFirstLoad = false;
+      if (!currentGlobalLoading) {
+        this.showContent$.next(false);
+        await this.appStateService.globalLoading$.publish(true);
+      }
+
+      await Promise.all([
+        this.updateMfeInfo(r, joinedBaseUrl),
+        this.updatePermissions(r),
+      ]);
+
+      if (!currentGlobalLoading) {
+        await this.appStateService.globalLoading$.publish(false);
+      }
+    }
+    return true;
+  }
+
+  private async updateAppStyles(r: BffGeneratedRoute) {
+    let link = document.getElementById('ocx_app_styles') as any;
+    if (!link) {
+      link = document.createElement('link');
+      link.id = 'ocx_app_styles';
+      link.rel = 'stylesheet';
+      link.media = 'all';
+      document.head.appendChild(link);
+    }
+    if (link.href !== Location.joinWithSlash(r.url, 'styles.css')) {
+      link.href = Location.joinWithSlash(r.url, 'styles.css');
+    }
   }
 
   private async updateMfeInfo(r: BffGeneratedRoute, joinedBaseUrl: string) {
@@ -121,7 +165,7 @@ export class RoutesService {
       mountPath: joinedBaseUrl,
       shellName: 'portal',
       remoteBaseUrl: r.url,
-      displayName: r.productName,
+      displayName: r.displayName,
       appId: r.appId,
       productName: r.productName,
     };
@@ -142,11 +186,18 @@ export class RoutesService {
     await this.permissionsTopic$.publish(permissions);
   }
 
-  private onRemoteLoadError(err: unknown) {
+  private async onRemoteLoadError(err: unknown) {
     console.log(`Failed to load remote module: ${err}`);
     this.portalMessageService.error({
       summaryKey: 'MESSAGE.ON_REMOTE_LOAD_ERROR',
     });
+    this.router.navigate([
+      (
+        await firstValueFrom(
+          this.appStateService.currentWorkspace$.asObservable()
+        )
+      ).baseUrl,
+    ]);
     throw err;
   }
 
@@ -165,7 +216,7 @@ export class RoutesService {
     }
     return {
       type: 'script',
-      remoteName: (r as WebComponentRoute).productName,
+      remoteName: r.productName,
       remoteEntry: r.remoteEntryUrl,
       exposedModule: './' + exposedModule,
     };
@@ -194,22 +245,27 @@ export class RoutesService {
     return url;
   }
 
-  private containsRouteForWorkspace(routes: BffGeneratedRoute[]): boolean {
+  private async containsRouteForWorkspace(
+    routes: BffGeneratedRoute[]
+  ): Promise<boolean> {
+    const baseUrl = (
+      await firstValueFrom(
+        this.appStateService.currentWorkspace$.asObservable()
+      )
+    ).baseUrl;
     return (
-      routes.find(
-        (r) =>
-          r.url ===
-          this.toRouteUrl(
-            this.appStateService.currentWorkspace$.getValue()?.baseUrl
-          )
-      ) === undefined
+      routes.find((r) => r.baseUrl === this.toRouteUrl(baseUrl)) !== undefined
     );
   }
 
-  private createFallbackRoute(): Route {
+  private async createFallbackRoute(): Promise<Route> {
     return {
       path: this.toRouteUrl(
-        this.appStateService.currentWorkspace$.getValue()?.baseUrl
+        (
+          await firstValueFrom(
+            this.appStateService.currentWorkspace$.asObservable()
+          )
+        ).baseUrl
       ),
       component: HomeComponent,
       pathMatch: PathMatch.full,

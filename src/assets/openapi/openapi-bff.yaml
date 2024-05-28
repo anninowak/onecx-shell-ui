@@ -3,33 +3,29 @@ openapi: 3.0.3
 info:
   title: onecx-shell-bff
   description: OneCx shell Bff
-  version: "1.0"
+  version: '1.0'
 servers:
   - url: http://onecx-shell-bff:8080/
 
 paths:
   /workspaceConfig:
     post:
-      x-onecx:
-        permissions:
-          workspaceConfig:
-            - read
       tags:
-        - "WorkspaceConfig"
+        - 'WorkspaceConfig'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetWorkspaceConfigRequest'
-      operationId: getWorkspaceConfig
+              $ref: '#/components/schemas/LoadWorkspaceConfigRequest'
+      operationId: loadWorkspaceConfig
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetWorkspaceConfigResponse'
+                $ref: '#/components/schemas/LoadWorkspaceConfigResponse'
         '400':
           description: Bad request
           content:
@@ -38,15 +34,10 @@ paths:
                 $ref: '#/components/schemas/ProblemDetailResponse'
         '404':
           description: 'Not Found'
-
   /workspaceConfig/themes/{name}/favicon:
     get:
-      x-onecx:
-        permissions:
-          workspaceConfig:
-            - read
       tags:
-        - "WorkspaceConfig"
+        - 'WorkspaceConfig'
       description: Load favicon by theme name
       operationId: getThemeFaviconByName
       parameters:
@@ -68,12 +59,33 @@ paths:
         404:
           description: Not found
 
+  /workspaceConfig/themes/{name}/logo:
+    get:
+      tags:
+        - 'WorkspaceConfig'
+      description: Load logo by theme name
+      operationId: getThemeLogoByName
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK
+          content:
+            image/*:
+              schema:
+                minimum: 1
+                maximum: 110000
+                type: string
+                format: binary
+        404:
+          description: Not found
+
   /userProfile:
     get:
-      x-onecx:
-        permissions:
-          userProfile:
-            - read
       tags:
         - userProfile
       operationId: getUserProfile
@@ -95,10 +107,6 @@ paths:
 
   /permissions:
     post:
-      x-onecx:
-        permissions:
-          permission:
-            - read
       tags:
         - permission
       operationId: getPermissions
@@ -126,14 +134,21 @@ paths:
 
 components:
   schemas:
-    GetWorkspaceConfigResponse:
+    LoadWorkspaceConfigRequest:
+      type: object
+      required:
+        - path
+      properties:
+        path:
+          type: string
+    LoadWorkspaceConfigResponse:
       type: object
       required:
         - 'routes'
         - 'theme'
         - 'workspace'
-        - 'remoteComponents'
-        - 'shellRemoteComponents'
+        - 'components'
+        - 'slots'
       properties:
         routes:
           type: array
@@ -143,23 +158,26 @@ components:
           $ref: '#/components/schemas/Theme'
         workspace:
           $ref: '#/components/schemas/Workspace'
-        remoteComponents:
+        components:
           type: array
           items:
             $ref: '#/components/schemas/RemoteComponent'
-        shellRemoteComponents:
+        slots:
           type: array
           items:
-            $ref: '#/components/schemas/RemoteComponentMapping'
-
-    GetWorkspaceConfigRequest:
+            $ref: '#/components/schemas/Slot'
+    Slot:
       type: object
       required:
-        - url
+        - 'name'
+        - 'components'
       properties:
-        url:
+        name:
           type: string
-
+        components:
+          type: array
+          items:
+            type: string
     GetPermissionsRequest:
       type: object
       required:
@@ -170,7 +188,6 @@ components:
           type: string
         productName:
           type: string
-
     Workspace:
       type: object
       required:
@@ -181,11 +198,10 @@ components:
           type: string
         baseUrl:
           type: string
-
     Theme:
       required:
-      - name
-      - properties
+        - name
+        - properties
       type: object
       properties:
         name:
@@ -207,7 +223,6 @@ components:
           type: string
         properties:
           type: string
-
     Route:
       type: object
       required:
@@ -219,6 +234,7 @@ components:
         - 'appId'
         - 'productName'
         - 'pathMatch'
+        - 'displayName'
       properties:
         url:
           type: string
@@ -238,15 +254,14 @@ components:
           $ref: '#/components/schemas/PathMatch'
         remoteName:
           type: string
-
+        displayName:
+          type: string
     Technologies:
       type: string
       enum: ['Angular', 'WebComponent']
-
     PathMatch:
       type: string
       enum: ['full', 'prefix']
-
     RemoteComponent:
       type: object
       required:
@@ -270,18 +285,6 @@ components:
           type: string
         exposedModule:
           type: string
-
-    RemoteComponentMapping:
-      type: object
-      required:
-        - 'slotName'
-        - 'remoteComponent'
-      properties:
-        slotName:
-          type: string
-        remoteComponent:
-          type: string
-
     GetUserProfileResponse:
       type: object
       required:
@@ -289,7 +292,6 @@ components:
       properties:
         userProfile:
           $ref: '#/components/schemas/UserProfile'
-
     UserProfile:
       type: object
       required:
@@ -298,11 +300,12 @@ components:
       properties:
         userId:
           type: string
+        organization:
+          type: string
         person:
           $ref: '#/components/schemas/UserPerson'
         accountSettings:
           $ref: '#/components/schemas/AccountSettings'
-
     UserPerson:
       type: object
       properties:
@@ -318,7 +321,6 @@ components:
           $ref: '#/components/schemas/UserPersonAddress'
         phone:
           $ref: '#/components/schemas/UserPersonPhone'
-
     UserPersonAddress:
       type: object
       properties:
@@ -332,7 +334,6 @@ components:
           type: string
         country:
           type: string
-
     UserPersonPhone:
       type: object
       properties:
@@ -340,11 +341,9 @@ components:
           $ref: '#/components/schemas/PhoneType'
         number:
           type: string
-
     PhoneType:
       type: string
       enum: ['MOBILE', 'LANDLINE']
-
     AccountSettings:
       type: object
       properties:
@@ -352,7 +351,6 @@ components:
           $ref: '#/components/schemas/LayoutAndThemeSettings'
         localeAndTimeSettings:
           $ref: '#/components/schemas/LocaleAndTimeSettings'
-
     LayoutAndThemeSettings:
       type: object
       properties:
@@ -360,15 +358,12 @@ components:
           $ref: '#/components/schemas/ColorScheme'
         menuMode:
           $ref: '#/components/schemas/MenuMode'
-
     ColorScheme:
       type: string
       enum: ['AUTO', 'LIGHT', 'DARK']
-
     MenuMode:
       type: string
       enum: ['HORIZONTAL', 'STATIC', 'OVERLAY', 'SLIM', 'SLIMPLUS']
-
     LocaleAndTimeSettings:
       type: object
       properties:
@@ -376,7 +371,6 @@ components:
           type: string
         timezone:
           type: string
-
     GetPermissionsResponse:
       type: object
       required:
@@ -386,7 +380,6 @@ components:
           type: array
           items:
             type: string
-
     ProblemDetailResponse:
       type: object
       properties:
@@ -402,7 +395,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProblemDetailInvalidParam'
-
     ProblemDetailParam:
       type: object
       properties:
@@ -410,7 +402,6 @@ components:
           type: string
         value:
           type: string
-
     ProblemDetailInvalidParam:
       type: object
       properties:
