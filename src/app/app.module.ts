@@ -15,7 +15,6 @@ import {
   TranslateCombinedLoader,
   TranslationCacheService,
 } from '@onecx/angular-accelerator';
-import { AngularAuthModule } from '@onecx/angular-auth';
 import {
   APP_CONFIG,
   AppStateService,
@@ -48,6 +47,7 @@ import {
   WorkspaceConfigBffService,
 } from './shared/generated';
 import { RoutesService } from './shared/services/routes.service';
+import { KeycloakAuthModule } from '@onecx/keycloak-auth';
 import { initializationErrorHandler } from './shared/utils/initialization-error-handler.utils';
 import { PermissionProxyService } from './shared/services/permission-proxy.service';
 
@@ -201,7 +201,7 @@ export function configurationServiceInitializer(
     AngularRemoteComponentsModule,
     BrowserAnimationsModule,
     RouterModule,
-    AngularAuthModule,
+    KeycloakAuthModule,
   ],
   providers: [
     { provide: APP_CONFIG, useValue: environment },
