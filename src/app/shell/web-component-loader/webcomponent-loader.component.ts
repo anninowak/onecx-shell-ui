@@ -4,13 +4,11 @@ import { firstValueFrom } from 'rxjs'
 
 @Component({
   standalone: false,
-  template: '<div #wrapper [attr.data-style-id]="styleId"></div>'
+  template: '<div #wrapper></div>'
 })
 export class WebcomponentLoaderComponent implements AfterContentInit {
   @ViewChild('wrapper', { read: ElementRef, static: true })
   wrapper?: ElementRef
-
-  styleId = ''
 
   constructor(private readonly appStateService: AppStateService) {}
 
@@ -19,9 +17,11 @@ export class WebcomponentLoaderComponent implements AfterContentInit {
 
     if (!currentMfe.elementName) throw new Error('elementName is missing in the configuration')
 
-    this.styleId = `${currentMfe.productName}|${currentMfe.appId}`
+    const styleId = `${currentMfe.productName}|${currentMfe.appId}`
 
     const element = document.createElement(currentMfe.elementName)
+    element.dataset['styleId'] = styleId
+    element.dataset['styleIsolation'] = ''
     this.wrapper?.nativeElement.appendChild(element)
   }
 }
